@@ -1,7 +1,6 @@
-from ast import literal_eval
 from itertools import cycle
 from src.explorer import Explorer
-from src.utils import entropy_to_color, probability_to_color
+from src.utils import probability_to_color
 from textual.app import App, ComposeResult, Binding
 from textual.containers import VerticalScroll
 from textual.reactive import reactive
@@ -9,7 +8,6 @@ from textual.widgets import Footer, Header, Static, DataTable
 from textwrap import dedent
 import random
 import sys
-import os
 import argparse
 import tomli 
 from datetime import datetime
@@ -37,7 +35,7 @@ MAX_PROMPTS = config["prompt"]["max_prompts"]
 class TokenExplorer(App):
     """Main application class."""
 
-    display_modes = cycle(["prompt", "prob", "entropy"])
+    display_modes = cycle(["prompt", "prob"])
     display_mode = reactive(next(display_modes))
 
     BINDINGS = [("e", "change_display_mode", "Mode"),
@@ -50,14 +48,12 @@ class TokenExplorer(App):
                 ("x", "save_prompt", "Save"),
                 ("j", "select_next", "Down"),
                 ("k", "select_prev", "Up"),
-                ("r", "toggle_struct", "Toggle struct"),
-                ("R", "next_struct", "Next struct"),
                 ("space", "append_weighted_token", "Weighted")
 
                 ]
     
     
-    def __init__(self, prompt=EXAMPLE_PROMPT, precompile=False):
+    def __init__(self, prompt=EXAMPLE_PROMPT):
         super().__init__()
         # Add support for multiple prompts.
         self.prompts = [prompt]
@@ -67,42 +63,6 @@ class TokenExplorer(App):
         self.displayed_tokens = self.explorer.get_top_n_tokens(n=TOKENS_TO_SHOW)
         self.rows = self._top_tokens_to_rows(self.displayed_tokens)
         self.selected_row = 0  # Track currently selected token row
-        self.regex_structs = self._get_regex_structs()
-        # this is the position of the stuct in the prompt
-        self.struct_index = None
-        # this is the position of the struct in the regex_structs list
-        self.current_struct_index = 0
-        if precompile:
-            self.precompile_regex_structs()
-
-    def precompile_regex_structs(self):
-        print("Precompiling regex structs, this may take a while...")
-        for name, regex in self.regex_structs:
-            print(name)
-            self.explorer.set_guide(regex)
-            self.explorer.clear_guide()
-        self.explorer.clear_guide()
-
-    def _get_regex_structs(self):
-        try:
-            struct_files = []
-            # Get all files in struct directory
-            for file in os.listdir("struct"):
-                if file.endswith(".txt"):
-                    file_path = os.path.join("struct", file)
-                    try:
-                        with open(file_path, "r") as f:
-                            # Get first line and strip whitespace
-                            regex = f.readline().strip()
-                            # Remove file extension and add tuple
-                            name = os.path.splitext(file)[0]
-                            struct_files.append((name, str(literal_eval(regex))))
-                    except:
-                        # Skip files that can't be read
-                        continue
-            return struct_files
-        except FileNotFoundError:
-            return []
 
     def _top_tokens_to_rows(self, tokens):
         return [("token_id", "token", "% probability")] + [
@@ -128,29 +88,8 @@ class TokenExplorer(App):
         table.move_cursor(row=self.selected_row)
         self.query_one("#results", Static).update(self._render_prompt())
     
-
-    def _render_structure_section(self):
-        struct_section = ""
-        if self.explorer.guide_is_finished():
-            struct_section = f"[on red]{self.regex_structs[self.current_struct_index][0]}[/on]"
-        elif self.struct_index is not None:
-            struct_section = f"[on green]{self.regex_structs[self.current_struct_index][0]}[/on]"
-
-        else:
-            struct_section = f"[on grey]{self.regex_structs[self.current_struct_index][0]}[/on]"
-        return struct_section
-    
     def _render_prompt(self):
-        if self.display_mode == "entropy":
-            entropy_legend = "".join([
-                f"[on {entropy_to_color(i/10)}] {i/10:.2f} [/on]"
-                for i in range(11)
-                ])
-            prompt_legend = f"[bold]Token entropy:[/bold]{entropy_legend}"
-            token_entropies = self.explorer.get_prompt_token_normalized_entropies()
-            token_strings = self.explorer.get_prompt_tokens_strings()
-            prompt_text = "".join(f"[on {entropy_to_color(entropy)}]{token}[/on]" for token, entropy in zip(token_strings, token_entropies))
-        elif self.display_mode == "prob":
+        if self.display_mode == "prob":
             prob_legend = "".join([
                 f"[on {probability_to_color(i/10)}] {i/10:.2f} [/on]"
                 for i in range(11)
@@ -171,7 +110,6 @@ class TokenExplorer(App):
 
 {prompt_legend}
 [bold]Prompt[/bold] {self.prompt_index+1}/{len(self.prompts)} tokens: {len(self.explorer.prompt_tokens)}
-[bold]Struct[/bold] {self._render_structure_section()}
 """)
     
     def on_mount(self) -> None:
@@ -180,24 +118,6 @@ class TokenExplorer(App):
         table.add_columns(*self.rows[0])
         table.add_rows(self.rows[1:])
         table.cursor_type = "row"
-
-    def action_next_struct(self):
-        self.current_struct_index = (self.current_struct_index + 1) % len(self.regex_structs)
-        self.query_one("#results", Static).update(self._render_prompt())
-
-    def action_toggle_struct(self):
-        if self.struct_index is None:
-            # this is the theoretical index of the first
-            # structure token when structured gen is activated
-            # even though that token *doesn't* exist yet.
-            # this track to help with backtracking.
-            self.struct_index = len(self.explorer.get_prompt_tokens())
-            self.explorer.set_guide(self.regex_structs[self.current_struct_index][1])
-        else:
-            self.struct_index = None
-            self.explorer.clear_guide()
-        self.query_one("#results", Static).update(self._render_prompt())
-        self._refresh_table()
         
     def action_add_prompt(self):
         if len(self.prompts) < MAX_PROMPTS:
@@ -251,15 +171,10 @@ class TokenExplorer(App):
 
     def action_append_token(self):
         """Append currently selected token"""
-        # TODO: here we need to distinguish between a dead and finished guide
-
         table = self.query_one(DataTable)
         if table.cursor_row is not None:
             if len(self.rows) > (table.cursor_row+1):
                 self.explorer.append_token(self.rows[table.cursor_row+1][0])
-                if self.explorer.guide_is_dead():
-                    self.explorer.clear_guide()
-                    self.struct_index = None
                 self.prompts[self.prompt_index] = self.explorer.get_prompt()
                 self._refresh_table()  # This will reset cursor position
 
@@ -272,20 +187,12 @@ class TokenExplorer(App):
             return
         chosen_token = random.choices(self.displayed_tokens, weights=weights, k=1)[0]
         self.explorer.append_token(chosen_token["token_id"])
-        if self.explorer.guide_is_dead():
-            self.explorer.clear_guide()
-            self.struct_index = None
         self.prompts[self.prompt_index] = self.explorer.get_prompt()
         self._refresh_table()
 
     def action_pop_token(self):
         if len(self.explorer.get_prompt_tokens()) > 1:
             self.explorer.pop_token()
-            if self.explorer.guide is not None:
-                self.explorer.clear_guide()
-                #  need to add logic for backtracking the guide
-                self.explorer.set_guide(self.regex_structs[self.current_struct_index][1]
-                                        ,ff_from=self.struct_index)
             self.prompts[self.prompt_index] = self.explorer.get_prompt()
             self.query_one("#results", Static).update(self._render_prompt())
             self._refresh_table()
@@ -295,7 +202,6 @@ class TokenExplorer(App):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Token Explorer Application')
     parser.add_argument('--input', '-i', type=str, help='Path to input text file')
-    parser.add_argument('--precompile', '-p', action='store_true', help='Precompile regex structs')
     args = parser.parse_args()
 
     prompt = EXAMPLE_PROMPT
@@ -309,6 +215,6 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Error reading file: {e}")
             sys.exit(1)
-    app = TokenExplorer(prompt, args.precompile)
+    app = TokenExplorer(prompt)
 
     app.run()

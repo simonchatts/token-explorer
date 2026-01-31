@@ -7,7 +7,7 @@ Token explore allows you to:
 - Step through generation one token at a time using either:
   * Arrow keys to navigate, pop and append tokens
   * Vim-style keys: h/l to pop/append, j/k to move up/down
-- View the token probabilities and entropies.
+- View token probabilities.
 - Add a copy of your current prompt to the list of prompts.
 - Cycle through the prompts by pressing `w` and `s`.
 - Add and remove prompts from the list with `a` and `d`.
@@ -28,12 +28,6 @@ In the model has a default prompt, but you can provide any text file as an argum
 
 ```bash
 uv run main.py --input <path_to_file>
-```
-
-If you're using regex structs, you can precompile them with:
-
-```bash
-uv run main.py --precompile
 ```
 
 ## Usage
@@ -72,7 +66,7 @@ If you want to experiment with dramatically different prompts, you should write 
 
 ## Visualization Layers
 
-Token Explorer has a few different visualization layers that you can toggle on and off.
+Token Explorer has a probability overlay that you can toggle on and off.
 
 ### Token Probabilities
 
@@ -81,16 +75,6 @@ It can be very helpful to see the probabilities of each token when generated, in
 ![Probabilities](./imgs/probabilities.png)
 
 In the image above we've used the entire output of an LLM as our prompt. This allows us to understand better what the model was reasoning about when it generated the output. Notice for example that the model was basically certain the answer was 72.
-
-### Token Entropies
-
-Another way to understand the model's reasoning is to look at the entropy of the token distribution. Entropy represents how uncertain it is about the next token chosen. The highest (normalized) entropy is 1 (which means all tokens look like reasonable choices). The lowest is 0 (which means the model is certain about the next token).
-
-You can simply press `e` again to enable the entropy view.
-
-![Entropy](./imgs/entropies.png)
-
-Pressing `e` again will return you back to the default view.
 
 ## Example Workflow
 
@@ -108,11 +92,7 @@ First let's understand the model's answer. We'll start by loading the prompt int
 
 Here we can see that the model was basically certain about the answer, which makes sense given that the prompt is a simple arithmetic problem. As we can see, the model assigns a probability of essentially 1 to the answer starting with '7'. Recall that we could also see this visually be looking at the 'probabilities' layer.
 
-It looks like our model is doing great, but let's go back to the entropy layer to see if we can find places to explore. Notice that the token 'Natalia' has higher entropy than the other tokens, which means the model is more uncertain about which token to choose next.
-
-![Entropy](./imgs/natalia.png)
-
-I'm curious what's happening there. I want to back up, but at the same time, don't want to lose my place in the prompt. I can use the `d` copy my prompt as a new prompt.
+I'm curious what's happening earlier in the prompt. I want to back up, but at the same time, don't want to lose my place in the prompt. I can use the `d` copy my prompt as a new prompt.
 
 ![Swapping prompts](./imgs/workflow1.png)
 
@@ -132,45 +112,6 @@ Here's the probability view for the new prompt:
 ![Exploring](./imgs/workflow3.png)
 
 You can see both that we *did* still get the correct answer, and that the path I chose was fairly low probability for a bit. So we've learned something interesting! Even if we perturb the prompt to a low-probability path in the middle of it's reasoning, we still get the correct answer!
-
-## Experimental Support For Structured Outputs
-
-Token Explorer now supports structured outputs!
-
-Currently Token Explorer comes with 5 precompiled regex structs:
-- eu_date
-- iso_date
-- us_date
-- month_name
-- name
-
-You'll see your current struct at the bottom of the prompt like so:
-
-![Struct](./imgs/current_struct.png)
-
-By pressing `Shift+r` you can cycle through the structs.
-
-![Toggle struct](./imgs/toggle_struct.png)
-
-When you press `r` the structure will be activated. This will change it's color to green and you will only see tokens that adhere to that structure.
-
-![Struct active](./imgs/struct_active.png)
-
-The structure will eventually reach a final state where the structure is satisfied (though there may be multiple ways to satisfy the structure). In this case the named structure will be highlighted in red.
-
-![Struct final](./imgs/struct_final.png)
-
-Finally if you complete the defined structure, the structure will automatically be toggled off, allowing you to choose from among the unstructured tokens.
-
-![Struct complete](./imgs/struct_complete.png)
-
-### Adding structure
-
-You can add your own structure by putting a .txt file in the `struct` folder. The file should contain a Python regex pattern.
-
-**Warning:** This is an experimental feature and the regex pattern can currently take a loooong time to compile (if they're sophisticated). Once compiled they take up very little memory, and are fast to run. To precompile your structs, you can use the `--precompile` flag.
-
-The precompile structs are stored in `src/.cache/` as `.pkl` files. 5 of them are precompiled in the repo for easy demoing.
 
 
 ## Configuration

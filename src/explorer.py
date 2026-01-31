@@ -5,8 +5,6 @@ The Explorer class manages the prompt internally and handles all interactions wi
 """
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
-import numpy as np
-from src.simpleguide import SimpleGuide
 class Explorer:
     def __init__(self, model_name="Qwen/Qwen2.5-0.5B"):
         """
@@ -27,23 +25,11 @@ class Explorer:
         else:
             self.device = torch.device("cpu")
         self.model = self.model.to(self.device)
-        self.guide = None
         
         # Initialize with empty promp
         self.prompt_text = ""
         self.prompt_tokens = []
     
-
-    def clear_guide(self):
-        self.guide = None
-
-    def set_guide(self, regex_struct,ff_from=None):
-        self.clear_guide()
-        self.guide = SimpleGuide(regex_struct, self.tokenizer)
-        if ff_from is not None:
-            for token in self.prompt_tokens[ff_from:]:
-                self.guide.advance(token)
-
 
     def set_prompt(self, prompt_text):
         """
@@ -94,42 +80,6 @@ class Explorer:
             token_probabilities.append(next_token_prob)
         return token_probabilities
     
-    def get_prompt_token_normalized_entropies(self):
-        # Convert token IDs to tensor and create input
-        input_ids = torch.tensor([self.prompt_tokens]).to(self.device)
-        
-        # Get the model's output in a single forward pass
-        with torch.no_grad():
-            outputs = self.model(input_ids)
-            logits = outputs.logits[0]  # Shape: [sequence_length, vocab_size]
-        
-        # Calculate normalized entropy for each position
-        normalized_entropies = []
-        
-        # First token has no context, so we'll use None or some default
-        normalized_entropies.append(0.5)
-        
-        # For each position after the first
-        for pos in range(len(self.prompt_tokens) - 1):
-            # The logits at position 'pos' predict the token at position 'pos+1'
-            position_logits = logits[pos]
-            position_probs = torch.softmax(position_logits, dim=-1)
-            
-            # Calculate entropy: -sum(p * log(p))
-            # We filter out zeros to avoid log(0) issues
-            probs_np = position_probs.cpu().numpy()
-            non_zero_probs = probs_np[probs_np > 0]
-            entropy = -np.sum(non_zero_probs * np.log2(non_zero_probs))
-            
-            # Normalize by maximum possible entropy (log2 of vocabulary size)
-            max_entropy = np.log2(len(position_probs))
-            normalized_entropy = entropy / max_entropy
-            
-            normalized_entropies.append(normalized_entropy)
-        
-        return normalized_entropies
-
-
     def get_prompt(self):
         """
         Get the current prompt text.
@@ -156,7 +106,6 @@ class Explorer:
     
     def pop_token(self):
         """
-        NOTE: Need to handle the guide in this case.
         Remove and return the last token from the prompt tokens.
         If the prompt is empty, return None.
         
@@ -184,21 +133,8 @@ class Explorer:
         
         # Update prompt text to match new tokens
         self.prompt_text = self.tokenizer.decode(self.prompt_tokens)
-        if self.guide is not None:
-            self.guide.advance(token_id)
-
         
         return self
-    
-    def guide_is_finished(self):
-        if self.guide is not None:
-            return self.guide.is_finished()
-        return False
-    
-    def guide_is_dead(self):
-        if self.guide is not None:
-            return self.guide.is_dead()
-        return False
     
     def get_top_n_tokens(self, n=5, search=""):
         """
@@ -222,13 +158,6 @@ class Explorer:
         # Get probabilities using softmax
         next_token_probs = torch.nn.functional.softmax(next_token_logits, dim=0)
 
-        if self.guide is not None:
-            allowed_tokens = self.guide.get_tokens()
-            allowed_tokens_mask = torch.zeros(len(next_token_probs), device=next_token_logits.device)
-            allowed_tokens_mask[allowed_tokens] = 1.0
-            next_token_probs =  next_token_probs * allowed_tokens_mask
-            # renormalize the probabilities
-            next_token_probs = next_token_probs / next_token_probs.sum()
         if search:
             # Filter tokens that contain the search string
             matching_tokens = []
@@ -243,9 +172,6 @@ class Explorer:
             
             # Sort by probability and take top n
             matching_tokens.sort(key=lambda x: x["probability"], reverse=True)
-            if self.guide is not None:
-                # make sure that the token id is in the allowed tokens
-                matching_tokens = [token for token in matching_tokens if token["token_id"] in allowed_tokens]
             return matching_tokens[:n]
         else:
             # Original behavior for no search string
@@ -259,52 +185,4 @@ class Explorer:
                     "token_id": idx.item(),
                     "probability": prob.item()
                 })
-            if self.guide is not None:
-                # make sure that the token id is in the allowed tokens
-                results = [token for token in results if token["token_id"] in allowed_tokens]
             return results
-
-"""
-Attempting to replicate the basic api of outlines-core, but
-we're going to try to reduce the memory footprint and make it more efficient.
-
-"""
-
-# Example usage
-if __name__ == "__main__":
-    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")  
-    # test the RegexGuide
-    guide = RegexGuide(r'a{1,5}', tokenizer)
-    print("Tokens:", guide.get_tokens())
-    guide.advance('a')
-    print("Tokens:", guide.get_tokens())
-    guide.advance('a')
-    print("Tokens:", guide.get_tokens())
-    explorer = Explorer()
-    explorer.set_prompt("Once upon a time, there was a")
-    
-    print("Prompt:", explorer.get_prompt())
-    print("Encoded prompt:", explorer.get_prompt_tokens())
-    print("-----")
-    print("Top tokens:", explorer.get_top_n_tokens())
-    print("-----")
-    print("Filtered tokens:", explorer.get_top_n_tokens(search="man"))
-    print("-----")
-    print("Appending token:", explorer.get_top_n_tokens(search="man")[0])
-    explorer.append_token(explorer.get_top_n_tokens(search="man")[0]["token_id"])
-    print("-----")
-    print("Prompt:", explorer.get_prompt())
-    print("Encoded prompt:", explorer.get_prompt_tokens())
-    print("-----")
-    print("Popping token:", explorer.pop_token())
-    print("-----")
-    print("Prompt:", explorer.get_prompt()) 
-    print("Token probabilities:", explorer.get_prompt_token_probabilities())
-    print("-----")
-    print("Token entropies:", explorer.get_prompt_token_normalized_entropies())
-    explorer.set_guide(r'a{1,5}')
-    print("-----")
-    print("Top tokens:", explorer.get_top_n_tokens())
-    print("-----")
-    print("Guide is finished:", explorer.guide.is_finished())
-
