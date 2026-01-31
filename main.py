@@ -7,6 +7,7 @@ from textual.containers import VerticalScroll
 from textual.reactive import reactive
 from textual.widgets import Footer, Header, Static, DataTable
 from textwrap import dedent
+import random
 import sys
 import os
 import argparse
@@ -50,7 +51,8 @@ class TokenExplorer(App):
                 ("j", "select_next", "Down"),
                 ("k", "select_prev", "Up"),
                 ("r", "toggle_struct", "Toggle struct"),
-                ("R", "next_struct", "Next struct")
+                ("R", "next_struct", "Next struct"),
+                ("space", "append_weighted_token", "Weighted")
 
                 ]
     
@@ -62,9 +64,8 @@ class TokenExplorer(App):
         self.prompt_index = 0
         self.explorer = Explorer(MODEL_NAME)
         self.explorer.set_prompt(prompt)
-        self.rows = self._top_tokens_to_rows(
-            self.explorer.get_top_n_tokens(n=TOKENS_TO_SHOW)
-            )
+        self.displayed_tokens = self.explorer.get_top_n_tokens(n=TOKENS_TO_SHOW)
+        self.rows = self._top_tokens_to_rows(self.displayed_tokens)
         self.selected_row = 0  # Track currently selected token row
         self.regex_structs = self._get_regex_structs()
         # this is the position of the stuct in the prompt
@@ -104,8 +105,8 @@ class TokenExplorer(App):
             return []
 
     def _top_tokens_to_rows(self, tokens):
-        return [("token_id", "token", "prob")] + [
-            (token["token_id"], token["token"], token["probability"])
+        return [("token_id", "token", "% probability")] + [
+            (token["token_id"], token["token"], int(round(token["probability"] * 100)))
             for token in tokens
         ]
         
@@ -118,9 +119,8 @@ class TokenExplorer(App):
 
     def _refresh_table(self):
         table = self.query_one(DataTable)
-        self.rows = self._top_tokens_to_rows(
-            self.explorer.get_top_n_tokens(n=TOKENS_TO_SHOW)
-            )
+        self.displayed_tokens = self.explorer.get_top_n_tokens(n=TOKENS_TO_SHOW)
+        self.rows = self._top_tokens_to_rows(self.displayed_tokens)
         table.clear()
         table.add_rows(self.rows[1:])
         # Reset cursor to top
@@ -262,6 +262,21 @@ class TokenExplorer(App):
                     self.struct_index = None
                 self.prompts[self.prompt_index] = self.explorer.get_prompt()
                 self._refresh_table()  # This will reset cursor position
+
+    def action_append_weighted_token(self):
+        """Append a randomly chosen token weighted by probability."""
+        if not self.displayed_tokens:
+            return
+        weights = [token["probability"] for token in self.displayed_tokens]
+        if not any(weight > 0 for weight in weights):
+            return
+        chosen_token = random.choices(self.displayed_tokens, weights=weights, k=1)[0]
+        self.explorer.append_token(chosen_token["token_id"])
+        if self.explorer.guide_is_dead():
+            self.explorer.clear_guide()
+            self.struct_index = None
+        self.prompts[self.prompt_index] = self.explorer.get_prompt()
+        self._refresh_table()
 
     def action_pop_token(self):
         if len(self.explorer.get_prompt_tokens()) > 1:
