@@ -30,6 +30,17 @@ In the model has a default prompt, but you can provide any text file as an argum
 uv run main.py --input <path_to_file>
 ```
 
+You can also run the web GUI and configure its bind address:
+
+```bash
+uv run main.py --gui --host 0.0.0.0 --port 4000
+```
+
+CLI options:
+- `--gui`: Run the web GUI instead of the terminal UI.
+- `--host`: Hostname/IP to bind the GUI server (default: `localhost`).
+- `--port`: Port for the GUI server (default: `4000`).
+
 ## Usage
 
 When you start the app you will see your prompt as well as a table of the top 30 tokens and their probabilities.
