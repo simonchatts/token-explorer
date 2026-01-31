@@ -202,6 +202,9 @@ class TokenExplorer(App):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Token Explorer Application')
     parser.add_argument('--input', '-i', type=str, help='Path to input text file')
+    parser.add_argument('--gui', action='store_true', help='Run the web GUI instead of the TUI')
+    parser.add_argument('--host', type=str, default='localhost', help='Host for the GUI server')
+    parser.add_argument('--port', type=int, default=4000, help='Port for the GUI server')
     args = parser.parse_args()
 
     prompt = EXAMPLE_PROMPT
@@ -215,6 +218,9 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Error reading file: {e}")
             sys.exit(1)
-    app = TokenExplorer(prompt)
-
-    app.run()
+    if args.gui:
+        from src.gui import run_gui
+        run_gui(prompt, host=args.host, port=args.port, model_name=MODEL_NAME, tokens_to_show=TOKENS_TO_SHOW)
+    else:
+        app = TokenExplorer(prompt)
+        app.run()
