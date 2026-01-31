@@ -386,7 +386,7 @@ def run_gui(prompt, host, port, model_name, tokens_to_show):
             # Disable Next and Continue when at end token (unless continue is active/cancelling)
             at_end = is_end_token()
             if not continue_active:
-                if at_end:
+                if at_end or not session.get_prompt_tokens():
                     next_button.disable()
                     continue_button.disable()
                 else:

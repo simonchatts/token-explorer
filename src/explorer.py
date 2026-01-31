@@ -53,8 +53,10 @@ class Explorer:
         Returns:
             list: A list of probabilities for each token in the sequence
         """
+        if not self.prompt_tokens:
+            return []
         # Convert token IDs to tensor and create input
-        input_ids = torch.tensor([self.prompt_tokens]).to(self.device)
+        input_ids = torch.tensor([self.prompt_tokens], dtype=torch.long, device=self.device)
         
         # Get the model's output in a single forward pass
         with torch.no_grad():
@@ -148,9 +150,12 @@ class Explorer:
         Returns:
             List of dicts containing token info and probabilities, sorted by probability
         """
+        if not self.prompt_tokens:
+            return []
         # Get model output for the encoded prompt
         with torch.no_grad():
-            outputs = self.model(torch.tensor([self.prompt_tokens]).to(self.device))
+            input_ids = torch.tensor([self.prompt_tokens], dtype=torch.long, device=self.device)
+            outputs = self.model(input_ids)
             
         # Get logits for the next token
         next_token_logits = outputs.logits[0, -1, :]
