@@ -1,6 +1,8 @@
 # Token Explorer
 
-Token Explorer allows you to interactively explore the token generation process of an LLM, using a "video game" style interface. You can use either arrow keys or vim-style navigation (h/j/k/l) along with WASD keys.
+Token Explorer allows you to interactively explore the token generation process of an LLM.
+
+You can either use a GUI, or a TUI using a "video game" style interface. You can use either arrow keys or vim-style navigation (h/j/k/l) along with WASD keys.
 
 Token explore allows you to:
 - Choose a starting prompt, or provide your own text file.
@@ -20,6 +22,19 @@ Token Explore uses `uv` for project management. Please see the [uv docs](https:/
 
 Once you have `uv` installed, you can install the dependencies and run the app with:
 
+You can also run the web GUI and configure its bind address:
+
+```bash
+uv run main.py --gui
+```
+
+CLI options:
+- `--gui`: Run the web GUI instead of the terminal UI.
+- `--host`: Hostname/IP to bind the GUI server (default: `localhost`).
+- `--port`: Port for the GUI server (default: `4000`).
+
+If you want the original TUI, then just run:
+
 ```bash 
 uv run main.py
 ```
@@ -29,17 +44,6 @@ In the model has a default prompt, but you can provide any text file as an argum
 ```bash
 uv run main.py --input <path_to_file>
 ```
-
-You can also run the web GUI and configure its bind address:
-
-```bash
-uv run main.py --gui --host 0.0.0.0 --port 4000
-```
-
-CLI options:
-- `--gui`: Run the web GUI instead of the terminal UI.
-- `--host`: Hostname/IP to bind the GUI server (default: `localhost`).
-- `--port`: Port for the GUI server (default: `4000`).
 
 ## Usage
 
